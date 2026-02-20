@@ -25,6 +25,7 @@ from acp.schema import (
     SseMcpServer,
 )
 
+
 try:
     from ollama import AsyncClient as OllamaAsyncClient
 except ImportError:
@@ -111,7 +112,8 @@ class OllamaAgent(Agent):
             protocol_version=PROTOCOL_VERSION,
             agent_capabilities=AgentCapabilities(
                 load_session=False,
-                prompt_capabilities=PromptCapabilities(image=True)
+                prompt_capabilities=PromptCapabilities(
+                    image=True, embedded_context=True)
             ),
             agent_info=Implementation(
                 name="ollama-agent",
@@ -224,28 +226,27 @@ class OllamaAgent(Agent):
 
         for block in prompt:
             # Handle text content
-            if hasattr(block, "text"):
+            if block.type == "text":
                 prompt_text += block.text
-            elif isinstance(block, dict):
-                if block.get("type") == "text":
-                    prompt_text += block.get("text", "")
-                elif block.get("type") == "image":
-                    # Handle image content from dict
-                    data = block.get("data", "")
-                    if data:
-                        try:
-                            images.append(base64.b64decode(data))
-                        except Exception as e:
-                            logging.error(f"Failed to decode image: {e}")
 
             # Handle image content from object
-            if hasattr(block, "type") and block.type == "image":
+            elif block.type == "image":
                 data = getattr(block, "data", "")
                 if data:
                     try:
                         images.append(base64.b64decode(data))
                     except Exception as e:
                         logging.error(f"Failed to decode image: {e}")
+            elif block.type == "resource":
+                resource = block.resource
+                mimeType = getattr(resource, "mimeType", "")
+                if mimeType.startswith("image/"):
+                    data = resource.blob
+                    if data:
+                        try:
+                            images.append(base64.b64decode(data))
+                        except Exception as e:
+                            logging.error(f"Failed to decode image resource: {e}")
 
         return prompt_text.strip(), images
 
@@ -300,4 +301,3 @@ if __name__ == "__main__":
     import sys
     from .cli import main
     sys.exit(main())
-
